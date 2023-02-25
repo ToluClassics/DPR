@@ -38,7 +38,7 @@ max_answer_length: 10
 eval_top_docs:
   - 50
 
-checkpoint_file_name: dpr_extractive_reader
+checkpoint_file_name: dpr_extractive_reader_multilingual
 
 # Path to a file to write prediction results to
 prediction_results_file:

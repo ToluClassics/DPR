@@ -344,6 +344,7 @@ def convert_retriever_results(
     workers = multiprocessing.Pool(num_workers)
     ds_size = len(samples)
     step = max(math.ceil(ds_size / num_workers), 1)
+    print(type(samples))
     chunks = [samples[i : i + step] for i in range(0, ds_size, step)]
     chunks = [(i, chunks[i]) for i in range(len(chunks))]
 
