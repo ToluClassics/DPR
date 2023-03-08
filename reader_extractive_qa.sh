@@ -21,11 +21,11 @@
 #   --save_steps $save_steps
 
 
-CUDA_VISIBLE_DEVICES=1,6 python train_extractive_reader.py \
+CUDA_VISIBLE_DEVICES=4,5,6,7 python train_extractive_reader.py \
     encoder.encoder_model_type=hf_bert \
     encoder.pretrained_model_cfg=bert-base-multilingual-uncased \
     encoder.sequence_length=350 \
-    train.batch_size=8 \
+    train.batch_size=16 \
     train_files=/home/oogundep/african_qa/dumps/datasets/downloads/data/retriever_results/nq/single/train.json \
     dev_files=/home/oogundep/african_qa/dumps/datasets/downloads/data/retriever_results/nq/single/dev.json  \
     gold_passages_src=/home/oogundep/african_qa/dumps/datasets/downloads/data/gold_passages_info/nq_train.json \
