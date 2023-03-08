@@ -142,3 +142,4 @@ tranlation_script/test.csv
 *.log
 old_runs/
 outputs/*
+reader_data/*
