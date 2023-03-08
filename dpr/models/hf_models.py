@@ -19,10 +19,10 @@ from torch import nn
 
 
 if transformers.__version__.startswith("4"):
-    from transformers import BertConfig, BertModel
+    from transformers import BertConfig, BertModel, XLMRobertaModel, XLMRobertaConfig
     from transformers import AdamW
     from transformers import BertTokenizer
-    from transformers import RobertaTokenizer
+    from transformers import RobertaTokenizer, XLMRobertaTokenizer
 else:
     from transformers.modeling_bert import BertConfig, BertModel
     from transformers.optimization import AdamW
@@ -70,6 +70,7 @@ def get_bert_biencoder_components(cfg, inference_only: bool = False, **kwargs):
     tensorizer = get_bert_tensorizer(cfg)
     return tensorizer, biencoder, optimizer
 
+#==================================================================================================
 
 def get_bert_reader_components(cfg, inference_only: bool = False, **kwargs):
     dropout = cfg.encoder.dropout if hasattr(cfg.encoder, "dropout") else 0.0
@@ -98,6 +99,34 @@ def get_bert_reader_components(cfg, inference_only: bool = False, **kwargs):
     tensorizer = get_bert_tensorizer(cfg)
     return tensorizer, reader, optimizer
 
+def get_xlmroberta_reader_components(cfg, inference_only: bool = False, **kwargs):
+    dropout = cfg.encoder.dropout if hasattr(cfg.encoder, "dropout") else 0.0
+    encoder = HFXLMRobertaEncoder.init_encoder(
+        cfg.encoder.pretrained_model_cfg,
+        projection_dim=cfg.encoder.projection_dim,
+        dropout=dropout,
+        pretrained=cfg.encoder.pretrained,
+        **kwargs
+    )
+
+    hidden_size = encoder.config.hidden_size
+    reader = Reader(encoder, hidden_size)
+
+    optimizer = (
+        get_optimizer(
+            reader,
+            learning_rate=cfg.train.learning_rate,
+            adam_eps=cfg.train.adam_eps,
+            weight_decay=cfg.train.weight_decay,
+        )
+        if not inference_only
+        else None
+    )
+
+    tensorizer = get_xlmroberta_tensorizer(cfg)
+    return tensorizer, reader, optimizer
+
+#==================================================================================================
 
 # TODO: unify tensorizer init methods
 def get_bert_tensorizer(cfg):
@@ -108,6 +137,15 @@ def get_bert_tensorizer(cfg):
         _add_special_tokens(tokenizer, cfg.special_tokens)
 
     return BertTensorizer(tokenizer, sequence_length)
+
+def get_xlmroberta_tensorizer(cfg):
+    sequence_length = cfg.encoder.sequence_length
+    pretrained_model_cfg = cfg.encoder.pretrained_model_cfg
+    tokenizer = get_xlmroberta_tokenizer(pretrained_model_cfg, do_lower_case=cfg.do_lower_case)
+    if cfg.special_tokens:
+        _add_special_tokens(tokenizer, cfg.special_tokens)
+
+    return XLMRobertaTensorizer(tokenizer, sequence_length)
 
 
 def get_bert_tensorizer_p(
@@ -195,6 +233,66 @@ def get_roberta_tokenizer(pretrained_cfg_name: str, do_lower_case: bool = True):
     # still uses HF code for tokenizer since they are the same
     return RobertaTokenizer.from_pretrained(pretrained_cfg_name, do_lower_case=do_lower_case)
 
+def get_xlmroberta_tokenizer(pretrained_cfg_name: str, do_lower_case: bool = True):
+    # still uses HF code for tokenizer since they are the same
+    return XLMRobertaTokenizer.from_pretrained(pretrained_cfg_name, do_lower_case=do_lower_case)
+
+#===================================================================================================
+
+class HFXLMRobertaEncoder(XLMRobertaModel):
+    def __init__(self, config, project_dim: int = 0):
+        XLMRobertaModel.__init__(self, config)
+        assert config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        self.encode_proj = nn.Linear(config.hidden_size, project_dim) if project_dim != 0 else None
+        self.init_weights()
+
+    @classmethod
+    def init_encoder(
+        cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, pretrained: bool = True, **kwargs
+    ) -> XLMRobertaModel:
+        logger.info("Initializing HF XLM-Roberta Encoder. cfg_name=%s", cfg_name)
+        cfg = XLMRobertaConfig.from_pretrained(cfg_name if cfg_name else "xlm-roberta-base")
+        if dropout != 0:
+            cfg.attention_probs_dropout_prob = dropout
+            cfg.hidden_dropout_prob = dropout
+        return cls(cfg, projection_dim)
+
+    def forward(self, input_ids, attention_mask, token_type_ids=None,
+                representation_token_pos=0):
+        out = super().forward(
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+        )
+
+        # HF >4.0 version support
+        if transformers.__version__.startswith("4") and isinstance(
+            out,
+            transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions,
+        ):
+            sequence_output = out.last_hidden_state
+            pooled_output = None
+            hidden_states = out.hidden_states
+
+        if isinstance(representation_token_pos, int):
+            pooled_output = sequence_output[:, representation_token_pos, :]
+        else:  # treat as a tensor
+            bsz = sequence_output.size(0)
+            assert representation_token_pos.size(0) == bsz, "query bsz={} while representation_token_pos bsz={}".format(
+                bsz, representation_token_pos.size(0)
+            )
+            pooled_output = torch.stack([sequence_output[i, representation_token_pos[i, 1], :] for i in range(bsz)])
+
+        if self.encode_proj:
+            pooled_output = self.encode_proj(pooled_output)
+        return sequence_output, pooled_output, hidden_states
+
+    def get_out_size(self):
+        if self.encode_proj:
+            return self.encode_proj.out_features
+        return self.config.hidden_size
+
+#===================================================================================================
 
 class HFBertEncoder(BertModel):
     def __init__(self, config, project_dim: int = 0):
@@ -342,3 +440,8 @@ class BertTensorizer(Tensorizer):
 class RobertaTensorizer(BertTensorizer):
     def __init__(self, tokenizer, max_length: int, pad_to_max: bool = True):
         super(RobertaTensorizer, self).__init__(tokenizer, max_length, pad_to_max=pad_to_max)
+
+
+class XLMRobertaTensorizer(BertTensorizer):
+    def __init__(self, tokenizer, max_length: int, pad_to_max: bool = True):
+        super(XLMRobertaTensorizer, self).__init__(tokenizer, max_length, pad_to_max=pad_to_max)

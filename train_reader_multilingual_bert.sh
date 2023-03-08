@@ -9,7 +9,7 @@ fi
 
 
 declare -a natural_questions_gold=("data.gold_passages_info.nq_train" "data.gold_passages_info.nq_dev" "data.gold_passages_info.nq_test")
-declare -a natural_questions_retriever=("data.retriever.nq-dev" "data.retriever.nq-train")
+declare -a natural_questions_retriever=("data.retriever_results.nq.single.dev" "data.retriever_results.nq.single.train")
 declare -a trivia_retriever=("data.retriever.trivia-dev" "data.retriever.trivia-train")
 declare -a squad1_retriever=("data.retriever.squad1-dev" "data.retriever.squad1-train")
 
@@ -68,8 +68,13 @@ if [ $data = "all" ]; then
     CUDA_VISIBLE_DEVICES=4,5,6,7 python train_extractive_reader.py \
         encoder.encoder_model_type=hf_bert \
         encoder.pretrained_model_cfg=bert-base-multilingual-uncased \
-        encoder.sequence_length=350 \
+        encoder.sequence_length=256 \
         train.batch_size=16 \
+        train.max_grad_norm=1.0 \
+        train.learning_rate=3e-5 \
+        train.num_train_epochs=20 \
+        train.warmup_steps=1000 \
+        train.weight_decay=0.01 \
         train_files=${working_directory}/reader_data/nq_retriever_results/downloads/data/retriever/nq-train.json,${working_directory}/reader_data/trivia_retriever_results/downloads/data/retriever/trivia-train.json,${working_directory}/reader_data/trivia_retriever_results/downloads/data/retriever/squad1-train.json \
         dev_files=${working_directory}/reader_data/nq_retriever_results/downloads/data/retriever/nq-dev.json,${working_directory}/reader_data/trivia_retriever_results/downloads/data/retriever/trivia-dev.json,${working_directory}/reader_data/trivia_retriever_results/downloads/data/retriever/squad1-dev.json \
         gold_passages_src=${working_directory}/reader_data/gold/downloads/data/gold_passages_info/nq_train.json \
@@ -77,12 +82,17 @@ if [ $data = "all" ]; then
         output_dir=checkpoint_path/reader/$data/multilingual_bert
 else
     CUDA_VISIBLE_DEVICES=4,5,6,7 python train_extractive_reader.py \
-        encoder.encoder_model_type=hf_bert \
-        encoder.pretrained_model_cfg=bert-base-multilingual-uncased \
-        encoder.sequence_length=350 \
+        encoder.encoder_model_type=hf_xlmr \
+        encoder.pretrained_model_cfg=xlm-roberta-base \
+        encoder.sequence_length=256 \
         train.batch_size=16 \
-        train_files=${working_directory}/reader_data/${data}_retriever_results/downloads/data/retriever/$data-train.json \
-        dev_files=${working_directory}/reader_data/${data}_retriever_results/downloads/data/retriever/$data-dev.json \
+        train.max_grad_norm=1.0 \
+        train.learning_rate=3e-5 \
+        train.num_train_epochs=20 \
+        train.warmup_steps=1000 \
+        train.weight_decay=0.01 \
+        train_files=${working_directory}/reader_data/${data}_retriever_results/downloads/data/retriever_results/$data/single/train.json \
+        dev_files=${working_directory}/reader_data/${data}_retriever_results/downloads/data/retriever_results/$data/single/dev.json \
         gold_passages_src=${working_directory}/reader_data/gold/downloads/data/gold_passages_info/nq_train.json \
         gold_passages_src_dev=${working_directory}/reader_data/gold/downloads/data/gold_passages_info/nq_dev.json \
         output_dir=checkpoint_path/reader/$data/multilingual_bert
