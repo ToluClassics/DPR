@@ -47,11 +47,18 @@ class Reader(nn.Module):
     ):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         N, M, L = input_ids.size()
+        # print("=================Forward==================")
+        # print("input_ids", input_ids)
+        # print("attention_mask", attention_mask)
+        # print("toke_type_ids", toke_type_ids)
+        # print(N, M, L)
+        # print("==========================================")
         start_logits, end_logits, relevance_logits = self._forward(
             input_ids.view(N * M, L),
             attention_mask.view(N * M, L),
             toke_type_ids.view(N * M, L),
         )
+
         if self.training:
             return compute_loss(
                 start_positions, end_positions, answer_mask, start_logits, end_logits, relevance_logits, N, M
@@ -271,6 +278,11 @@ def _create_question_passages_tensors(
         input_ids = torch.cat([input_ids, *empty_negatives], dim=0)
         toke_type_ids = torch.cat([toke_type_ids, *empty_token_type_ids], dim=0)
 
+    # print("input_ids", input_ids)
+    # print("answer_starts_tensor", answer_starts_tensor)
+    # print("answer_ends_tensor", answer_ends_tensor)
+    # print("answer_mask", answer_mask)
+    # print("toke_type_ids", toke_type_ids)
     return input_ids, answer_starts_tensor, answer_ends_tensor, answer_mask, toke_type_ids
 
 

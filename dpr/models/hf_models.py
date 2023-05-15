@@ -108,8 +108,11 @@ def get_xlmroberta_reader_components(cfg, inference_only: bool = False, **kwargs
         pretrained=cfg.encoder.pretrained,
         **kwargs
     )
-
+    tensorizer = get_xlmroberta_tensorizer(cfg)
     hidden_size = encoder.config.hidden_size
+
+    encoder.resize_token_embeddings(len(tensorizer.tokenizer))
+
     reader = Reader(encoder, hidden_size)
 
     optimizer = (
@@ -123,7 +126,6 @@ def get_xlmroberta_reader_components(cfg, inference_only: bool = False, **kwargs
         else None
     )
 
-    tensorizer = get_xlmroberta_tensorizer(cfg)
     return tensorizer, reader, optimizer
 
 #==================================================================================================
@@ -445,3 +447,17 @@ class RobertaTensorizer(BertTensorizer):
 class XLMRobertaTensorizer(BertTensorizer):
     def __init__(self, tokenizer, max_length: int, pad_to_max: bool = True):
         super(XLMRobertaTensorizer, self).__init__(tokenizer, max_length, pad_to_max=pad_to_max)
+    
+    def is_sub_word_id(self, token_id: int):
+        token = self.tokenizer.convert_ids_to_tokens([token_id])[0]
+        return not token.startswith("_")
+
+    def get_attn_mask(self, tokens_tensor: T) -> T:
+        return (tokens_tensor != self.get_pad_id()).int()
+
+
+if __name__ == "__main__":
+    tokenizer = get_xlmroberta_tokenizer("xlm-roberta-base")
+    tensorizer = XLMRobertaTensorizer(tokenizer, 128)
+
+    print(tensorizer.text_to_tensor("hello world"))

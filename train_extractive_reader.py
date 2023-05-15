@@ -477,6 +477,10 @@ class ReaderTrainer(object):
         attn_mask = self.tensorizer.get_attn_mask(input.input_ids)
         questions_num, passages_per_question, _ = input.input_ids.size()
 
+        # print("Tokenizer Length", len(self.tensorizer.tokenizer))
+        # print("Input Ids", input.input_ids)
+
+        # print("====================================")
         if self.reader.training:
             loss = self.reader(
                 input.input_ids,
